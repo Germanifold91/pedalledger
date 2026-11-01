@@ -1,0 +1,10 @@
+{
+  "name": "pedalledger",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first bicycle-trip expense tracker (no build step — this file is only for tests)",
+  "scripts": {
+    "test": "TZ=UTC node --test && TZ=America/Bogota node --test && TZ=Asia/Bishkek node --test && TZ=Asia/Kathmandu node --test",
+    "serve": "python3 -m http.server 8471"
+  }
+}
