@@ -22,7 +22,8 @@ export function uid(){ return Date.now().toString(36) + Math.random().toString(3
 export function freshState(){
   return {
     version: SCHEMA_VERSION,
-    settings: { homeCurrency:"USD", currentCountryId:null, lastBackup:null, lastPaidWith:"cash" },
+    settings: { homeCurrency:"USD", currentCountryId:null, lastBackup:null, lastPaidWith:"cash",
+                trip: { budgetUSD:null, startDay:null, endDay:null } },
     rates: { USD: 1 },  // local units per 1 USD, one rate per currency
     countries: [],   // {id,name,currency,dailyTargetUSD}
     categories: DEFAULT_CATEGORIES.map(c => ({
@@ -64,6 +65,7 @@ export function migrate(data, { offsetOf = offsetAt } = {}){
   while (v < SCHEMA_VERSION) { MIGRATIONS[v](d, { offsetOf }); v++; }
   d.version = SCHEMA_VERSION;
   d.settings = { homeCurrency:"USD", currentCountryId:null, lastBackup:null, lastPaidWith:"cash", ...d.settings };
+  d.settings.trip = { budgetUSD:null, startDay:null, endDay:null, ...d.settings.trip };
   return d;
 }
 
@@ -105,6 +107,7 @@ export function validate(d){
     if (!catIds.has(e?.catId)) problems.push(`${where} points to a missing category`);
     if (!isCode(e?.currency)) problems.push(`${where} has a bad currency`);
     if (e?.paidWith !== "cash" && e?.paidWith !== "card") problems.push(`${where} doesn't say cash or card`);
+    if (e?.oneOff !== undefined && typeof e.oneOff !== "boolean") problems.push(`${where} has a bad one-off flag`);
   });
   d.cash.forEach((m, i) => {
     const where = `cash movement #${i+1}`;

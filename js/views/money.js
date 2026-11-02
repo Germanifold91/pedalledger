@@ -87,3 +87,17 @@ export function paidWithToggle({ value, onChange = () => {} }){
 }
 
 export const rateText = (perUSD, code) => `1 USD = ${fmtNum(+perUSD.toPrecision(6))} ${code}`;
+
+/** "One-off" switch: big, rare costs kept out of daily averages and trends. */
+export function oneOffToggle({ value = false, onChange = () => {} } = {}){
+  let v = value;
+  const btn = el("button", { type:"button", class:"pill", "aria-pressed":"false",
+    onclick:() => { v = !v; paint(); onChange(v); } }, "★ One-off");
+  const hint = el("span", { class:"hint" }, "visa, flight, big repair — kept out of daily averages");
+  function paint(){
+    btn.classList.toggle("active", v);
+    btn.setAttribute("aria-pressed", String(v));
+  }
+  paint();
+  return { node: el("div", { class:"oneoff-row" }, btn, hint), get value(){ return v; } };
+}

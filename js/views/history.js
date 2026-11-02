@@ -8,7 +8,7 @@ import { parseAmount } from "../parse.js";
 import { sumUSD } from "../stats.js";
 import { render } from "../router.js";
 import { categoryPicker } from "./picker.js";
-import { currencyField, currencyChoices, paidWithToggle } from "./money.js";
+import { currencyField, currencyChoices, paidWithToggle, oneOffToggle } from "./money.js";
 
 export function expenseRow(e){
   const cat = catById(e.catId);
@@ -19,7 +19,8 @@ export function expenseRow(e){
   return el("div", { class:"exp", onclick:() => openExpenseEditor(e) },
     el("span", { class:"e" }, cat ? cat.emoji : "❓"),
     el("div", { class:"mid" },
-      el("div", { class:"t1" }, (cat ? cat.name : "Unknown") + (sub ? " · " + sub.name : "")),
+      el("div", { class:"t1" }, (cat ? cat.name : "Unknown") + (sub ? " · " + sub.name : ""),
+        e.oneOff ? el("span", { class:"badge oneoff" }, "one-off") : ""),
       el("div", { class:"t2" }, [e.paidWith === "card" ? "💳" : null, e.note, cc ? cc.name : null, clock]
         .filter(Boolean).join(" · "))
     ),
@@ -44,7 +45,7 @@ export function renderHistory(view){
   for (const dk of [...byDay.keys()].sort().reverse()) {
     const list = byDay.get(dk).sort((a, b) => b.ts.localeCompare(a.ts));
     view.appendChild(el("div", { class:"day-h" },
-      el("span", {}, fmtDay(dk)), el("b", {}, fmtUSD(sumUSD(list)))));
+      el("span", {}, fmtDay(dk)), el("b", {}, fmtUSD(sumUSD(list)))));   // the day's true total, one-offs included
     list.forEach(e => view.appendChild(expenseRow(e)));
   }
 }
@@ -65,6 +66,7 @@ export function openExpenseEditor(e){
       onChange: code => { amountLbl.textContent = `Amount (${code || "—"})`; },
     });
     const paid = paidWithToggle({ value: e.paidWith || "card" });
+    const oneOff = oneOffToggle({ value: !!e.oneOff });
     const amountLbl = el("label", { class:"f" }, `Amount (${e.currency})`);
 
     const picker = categoryPicker({
@@ -79,6 +81,7 @@ export function openExpenseEditor(e){
     sheet.append(
       amountLbl, amountIn, curField.node,
       el("label", { class:"f" }, "Paid with"), paid.node,
+      oneOff.node,
       el("label", { class:"f" }, "Country"), countrySel,
       el("label", { class:"f" }, "Category"), ...picker.nodes,
       el("label", { class:"f" }, "Note"), noteIn,
@@ -103,6 +106,7 @@ export function openExpenseEditor(e){
       if (money.currency !== e.currency) { e.currency = money.currency; e.perUSD = money.perUSD; }
       e.usd = e.amount / e.perUSD;
       e.paidWith = paid.value;
+      if (oneOff.value) e.oneOff = true; else delete e.oneOff;
       e.catId = catId; e.subId = subId;
       e.note = noteIn.value.trim();
       if (whenIn.value) e.ts = fromWallClock(whenIn.value, e.tz);

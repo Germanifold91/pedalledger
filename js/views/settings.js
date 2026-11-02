@@ -61,7 +61,46 @@ export function openRateEditor(code){
   });
 }
 
+/* ---- trip: budget and dates ---- */
+export function openTripEditor(){
+  modal((sheet, close) => {
+    const t = S.settings.trip || {};
+    const initialBudget = t.budgetUSD ? String(t.budgetUSD) : "";
+    const budgetIn = el("input", { class:"txt", type:"text", id:"trip-budget", inputmode:"decimal",
+      placeholder:"e.g. 9000", value: initialBudget, autocomplete:"off" });
+    const startIn = el("input", { class:"txt", type:"date", id:"trip-start", value: t.startDay || "" });
+    const endIn = el("input", { class:"txt", type:"date", id:"trip-end", value: t.endDay || "" });
+    sheet.append(
+      el("h2", {}, "Trip budget"),
+      el("label", { class:"f", for:"trip-budget" }, "Total budget for the trip (USD)"), budgetIn,
+      el("p", { class:"hint", style:"margin-top:4px" }, "Everything counts against it, one-offs included. Leave empty to turn the projection off."),
+      el("label", { class:"f", for:"trip-start" }, "Trip starts (optional)"), startIn,
+      el("p", { class:"hint", style:"margin-top:4px" }, "Expenses before this date (gear bought at home) don't count. Empty = from your first expense."),
+      el("label", { class:"f", for:"trip-end" }, "Planned end (optional)"), endIn,
+      el("p", { class:"hint", style:"margin-top:4px" }, "With an end date, Stats shows how much you can spend per day to make it."),
+      el("div", { class:"section-gap" }),
+      el("button", { class:"btn", onclick:() => {
+        const raw = budgetIn.value.trim();
+        const budget = !raw ? null : raw === initialBudget ? t.budgetUSD : parseAmount(raw);
+        if (raw && !(budget > 0)) { toast("Enter the budget as a number, e.g. 9000"); return; }
+        if (startIn.value && endIn.value && endIn.value <= startIn.value) { toast("The end date should be after the start"); return; }
+        S.settings.trip = { budgetUSD: budget, startDay: startIn.value || null, endDay: endIn.value || null };
+        save(); close(); render(); toast(budget ? "Trip budget saved" : "Trip settings saved");
+      }}, "Save"));
+  });
+}
+
 export function renderSettings(view){
+  /* trip */
+  const t = S.settings.trip || {};
+  const fmtD = k => new Date(k + "T12:00:00Z").toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric", timeZone:"UTC" });
+  view.appendChild(el("div", { class:"card" },
+    el("h2", {}, "Trip", el("button", { class:"iconbtn", onclick:() => openTripEditor() }, "edit")),
+    el("div", { class:"li" }, el("div", { class:"mid" },
+      el("div", { class:"t1" }, t.budgetUSD ? `Budget ${fmtUSD(t.budgetUSD)}` : "No budget set"),
+      el("div", { class:"t2" }, [t.startDay ? "from " + fmtD(t.startDay) : "from your first expense",
+                                 t.endDay ? "until " + fmtD(t.endDay) : "no end date"].join(" · "))))));
+
   /* countries */
   const cCard = el("div", { class:"card" }, el("h2", {}, "Countries",
     el("button", { class:"iconbtn", onclick:() => openCountryEditor(null) }, "＋ add")));

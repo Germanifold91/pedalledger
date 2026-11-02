@@ -10,7 +10,7 @@ import { render, go } from "../router.js";
 import { categoryPicker } from "./picker.js";
 import { expenseRow } from "./history.js";
 import { openCountryEditor } from "./settings.js";
-import { currencyField, currencyChoices, paidWithToggle, rateText } from "./money.js";
+import { currencyField, currencyChoices, paidWithToggle, oneOffToggle, rateText } from "./money.js";
 import { balances } from "../wallet.js";
 import { backupStatus, backupMessage } from "../safety.js";
 import { backupNow, importButton } from "../backup.js";
@@ -45,7 +45,8 @@ export function renderLog(view){
 
   const today = todayKey();
   const todays = S.expenses.filter(e => dayOf(e) === today);
-  view.appendChild(meterCard(sumUSD(todays), cc.dailyTargetUSD));
+  const todaysOneOffs = sumUSD(todays.filter(e => e.oneOff));
+  view.appendChild(meterCard(sumUSD(todays) - todaysOneOffs, cc.dailyTargetUSD, todaysOneOffs));
 
   // ---- entry form ----
   const amountIn = el("input", { type:"text", id:"amount", inputmode:"decimal", placeholder:"0",
@@ -64,6 +65,7 @@ export function renderLog(view){
     value: S.settings.lastPaidWith || "cash",
     onChange: () => updatePreview(),
   });
+  const oneOff = oneOffToggle();
 
   function updatePreview(){
     const code = curField.currency;
@@ -117,6 +119,7 @@ export function renderLog(view){
       id: uid(), ts, tz, amount:a, currency:money.currency, perUSD:money.perUSD,
       usd: a / money.perUSD, countryId: cc.id, catId: draft.catId, subId: draft.subId,
       note: noteIn.value.trim(), paidWith: paid.value,
+      ...(oneOff.value ? { oneOff: true } : {}),
     });
     S.settings.lastPaidWith = paid.value;
     save();
@@ -133,6 +136,7 @@ export function renderLog(view){
     curField.node,
     el("label", { class:"f" }, "Paid with"), paid.node,
     cashLine,
+    oneOff.node,
     el("label", { class:"f" }, "Category"), ...picker.nodes,
     el("label", { class:"f" }, "Note"), noteIn,
     el("label", { class:"f" }, "When"), whenIn,
@@ -148,7 +152,7 @@ export function renderLog(view){
   }
 }
 
-function meterCard(spent, target){
+function meterCard(spent, target, oneOffs = 0){
   const pct = target > 0 ? spent / target : 0;
   const fillColor = pct > 1 ? "var(--critical)" : pct >= .9 ? "var(--warning)" : "var(--s1)";
   const status =
@@ -161,6 +165,7 @@ function meterCard(spent, target){
       el("div", { class:"hint" }, Math.round(pct * 100) + "%")
     ),
     el("div", { class:"meter" }, el("div", { style:`width:${Math.min(100, pct * 100)}%;background:${fillColor}` })),
-    target > 0 ? status : el("div", { class:"status-note" }, "No daily target set for this country.")
+    target > 0 ? status : el("div", { class:"status-note" }, "No daily target set for this country."),
+    oneOffs > 0 ? el("div", { class:"status-note" }, `★ plus ${fmtUSD(oneOffs)} in one-offs today, not counted against the target`) : ""
   );
 }

@@ -89,9 +89,9 @@ test("load never discards data it can't read", () => {
 test("CSV uses local date/time, quotes commas, and appends the offset", () => {
   const csv = buildCSV(migrate(v1(), { offsetOf: () => -300 }));
   const [head, row] = csv.split("\n");
-  assert.equal(head, "date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset,paid_with");
+  assert.equal(head, "date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset,paid_with,one_off");
   // 02:00 UTC on 1 March was 21:00 on 28 Feb in Bogotá
-  assert.equal(row, '2026-02-28,21:00,40000,COP,4000,10.00,Colombia,Food,Restaurant,"bandeja, paisa",-05:00,card');
+  assert.equal(row, '2026-02-28,21:00,40000,COP,4000,10.00,Colombia,Food,Restaurant,"bandeja, paisa",-05:00,card,');
   assert.equal(isoOffset(345), "+05:45");
 });
 
