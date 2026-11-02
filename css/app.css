@@ -193,3 +193,11 @@ label.check input{margin-top:2px; accent-color:var(--s1)}
 .wallet-row .t1.neg{color:var(--critical)}
 .wallet-row.empty-cur{opacity:.5}
 @media (max-width:380px){ .wallet-actions{grid-template-columns:1fr 1fr} .wallet-actions .btn.ghost{grid-column:1 / -1} }
+
+/* backup & snapshots */
+.sheet-p{font-size:14px; color:var(--ink-2); margin-bottom:8px; line-height:1.4}
+.backup-state{font-size:14px; font-weight:600; color:var(--good-text); margin-bottom:10px}
+.backup-state.pending{color:var(--critical)}
+ul.tips{margin:12px 0 0; padding-left:18px; font-size:12px; color:var(--ink-2); display:grid; gap:5px; line-height:1.4}
+ul.tips b{color:var(--ink)}
+.restore-hint{display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; justify-content:center; margin-top:12px; font-size:13px; color:var(--ink-2)}
