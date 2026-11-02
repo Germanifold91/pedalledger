@@ -149,6 +149,7 @@ export function load(storage = globalThis.localStorage){
 
 let persistRequested = false;
 export function save(storage = globalThis.localStorage){
+  S.settings.rev = (S.settings.rev || 0) + 1;   // counts changes, for "N changes since your last backup"
   storage.setItem(KEY, JSON.stringify(S));
   if (!persistRequested && globalThis.navigator?.storage?.persist) {
     persistRequested = true;

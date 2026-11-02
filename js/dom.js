@@ -58,3 +58,31 @@ export function hideTip(){
   const tip = document.getElementById("tooltip");
   if (tip) tip.style.display = "none";
 }
+
+/**
+ * In-page confirmation sheet (works everywhere, unlike window.confirm, and can say more).
+ * onConfirm may be async; the sheet closes after it settles.
+ */
+export function confirmSheet({ title, body = [], action, danger = false, cancel = "Cancel", onConfirm }){
+  return modal((sheet, close) => {
+    const go = el("button", { class:"btn" + (danger ? " danger" : ""), onclick: async () => {
+      go.disabled = true;
+      try { await onConfirm(); } finally { close(); }
+    }}, action);
+    sheet.append(el("h2", {}, title),
+      ...[].concat(body).map(p => typeof p === "string" ? el("p", { class:"sheet-p" }, p) : p),
+      el("div", { class:"section-gap" }), go,
+      el("div", { class:"section-gap" }),
+      el("button", { class:"btn ghost", onclick: close }, cancel));
+  });
+}
+
+/** In-page notice with a single OK button. */
+export function noticeSheet(title, ...body){
+  return modal((sheet, close) => {
+    sheet.append(el("h2", {}, title),
+      ...body.map(p => typeof p === "string" ? el("p", { class:"sheet-p" }, p) : p),
+      el("div", { class:"section-gap" }),
+      el("button", { class:"btn", onclick: close }, "OK"));
+  });
+}

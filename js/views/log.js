@@ -12,26 +12,21 @@ import { expenseRow } from "./history.js";
 import { openCountryEditor } from "./settings.js";
 import { currencyField, currencyChoices, paidWithToggle, rateText } from "./money.js";
 import { balances } from "../wallet.js";
+import { backupStatus, backupMessage } from "../safety.js";
+import { backupNow, importButton } from "../backup.js";
 
 // selections survive re-renders (e.g. switching tabs mid-entry).
 // currency null = the current country's currency.
 const draft = { catId:null, subId:null, currency:null };
 
-export function backupOverdueDays(now = Date.now()){
-  if (!S.expenses.length) return 0;
-  const since = S.settings.lastBackup
-    || S.expenses.reduce((a, e) => e.ts < a ? e.ts : a, S.expenses[0].ts);
-  return Math.floor((now - new Date(since)) / 864e5);
-}
-
 export function renderLog(view){
   const cc = currentCountry();
 
-  const overdue = backupOverdueDays();
-  if (overdue >= 3) {
+  const status = backupStatus(S);
+  if (status.nag) {
     view.appendChild(el("div", { class:"banner" },
-      el("div", { class:"mid" }, `⛑️ No backup in ${overdue} days. If the phone goes, un-exported expenses go with it.`),
-      el("button", { class:"btn small", onclick:() => go("settings") }, "Back up")
+      el("div", { class:"mid" }, "⛑️ " + backupMessage(status)),
+      el("button", { class:"btn small", onclick: backupNow }, "Back up now")
     ));
   }
 
@@ -40,7 +35,10 @@ export function renderLog(view){
       el("h2", {}, "Welcome to PedalLedger"),
       el("p", { class:"hint", style:"margin-bottom:12px" },
         "Add the country you're riding in first — its currency, a rough exchange rate, and your daily budget. Everything else flows from that."),
-      el("button", { class:"btn", onclick:() => openCountryEditor(null) }, "＋ Add your first country")
+      el("button", { class:"btn", onclick:() => openCountryEditor(null) }, "＋ Add your first country"),
+      S.expenses.length ? "" : el("div", { class:"restore-hint" },
+        el("span", {}, "New phone? Restoring from a backup?"),
+        importButton({ label:"Restore a backup file", cls:"linkbtn" }))
     ));
     return;
   }

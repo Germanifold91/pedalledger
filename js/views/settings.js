@@ -1,11 +1,33 @@
 /* Settings tab plus the country / category editors and the country switcher. */
 
-import { el, modal, toast } from "../dom.js";
+import { el, modal, toast, confirmSheet } from "../dom.js";
 import { S, save, setState, uid, freshState } from "../state.js";
 import { fmtUSD, fmtNum } from "../format.js";
 import { parseAmount } from "../parse.js";
 import { render } from "../router.js";
-import { exportFile, shareBackup, importButton } from "../backup.js";
+import { exportFile, backupNow, canShareFiles, importButton, replaceData } from "../backup.js";
+import { backupStatus } from "../safety.js";
+import { listSnapshots, readSnapshot } from "../snapshots.js";
+
+function snapshotRow(snap){
+  const when = new Date(snap.ts).toLocaleString(undefined, { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+  return el("div", { class:"li" },
+    el("div", { class:"mid" },
+      el("div", { class:"t1" }, when),
+      el("div", { class:"t2" }, `${snap.reason} · ${snap.expenses} expense${snap.expenses === 1 ? "" : "s"}` +
+        (snap.cash ? ` · ${snap.cash} cash movement${snap.cash === 1 ? "" : "s"}` : ""))),
+    el("button", { class:"iconbtn", onclick:() => confirmSheet({
+      title: "Restore this snapshot?",
+      body: [`Your data goes back to how it was on ${when} (${snap.expenses} expenses).`,
+             "What's on the phone now is kept as a snapshot first, so you can switch back."],
+      action: "Restore snapshot", danger: true,
+      onConfirm: async () => {
+        const data = await readSnapshot(snap.id);
+        if (!data) { toast("That snapshot is gone"); return; }
+        await replaceData(data, { reason:"before restore", message:"Snapshot restored" });
+      },
+    }) }, "restore"));
+}
 import { rateText } from "./money.js";
 
 /** Set a currency's rate; optionally re-value the expenses logged in it. Returns how many changed. */
@@ -88,18 +110,34 @@ export function renderSettings(view){
   view.appendChild(catCard);
 
   /* backup & export */
+  const status = backupStatus(S);
   const lastB = S.settings.lastBackup
-    ? new Date(S.settings.lastBackup).toLocaleDateString(undefined, { month:"short", day:"numeric" }) : "never";
+    ? new Date(S.settings.lastBackup).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" })
+    : "never";
   view.appendChild(el("div", { class:"card" },
-    el("h2", {}, "Backup & export", el("span", { class:"hint" }, "last: " + lastB)),
-    el("p", { class:"hint", style:"margin-bottom:10px" },
-      "Data lives only on this phone. Export regularly — email it to yourself or drop it in cloud storage."),
-    el("div", { class:"row" },
-      el("button", { class:"btn small", onclick:() => exportFile("csv") }, "⬇ CSV"),
-      el("button", { class:"btn small", onclick:() => exportFile("json") }, "⬇ JSON backup"),
-      navigator.share ? el("button", { class:"btn small ghost", onclick:shareBackup }, "Share…") : "",
-      importButton()
-    )));
+    el("h2", {}, "Backup", el("span", { class:"hint" }, "last: " + lastB)),
+    el("p", { class: "backup-state" + (status.changes ? " pending" : "") },
+      status.changes ? `${status.changes} change${status.changes === 1 ? "" : "s"} not backed up yet.` : "Everything is backed up."),
+    el("button", { class:"btn", onclick: backupNow }, canShareFiles() ? "Back up now" : "⬇ Download backup"),
+    el("ul", { class:"tips" },
+      el("li", {}, "On iPhone: Back up now → ", el("b", {}, "Save to Files"), " → iCloud Drive → a PedalLedger folder. It uploads by itself next time you have signal."),
+      el("li", {}, "Mail it to yourself as a second copy now and then."),
+      el("li", {}, el("b", {}, "Deleting the app's icon from the home screen deletes all its data."), " Back up before you ever do.")),
+    el("div", { class:"row", style:"margin-top:10px" },
+      importButton({ label:"Restore from a backup file" }),
+      el("button", { class:"btn small ghost", onclick:() => exportFile("csv") }, "⬇ CSV for spreadsheets"),
+      canShareFiles() ? el("button", { class:"btn small ghost", onclick:() => exportFile("json") }, "⬇ Download JSON") : "")
+  ));
+
+  /* on-phone snapshots (filled in asynchronously) */
+  const snapCard = el("div", { class:"card" },
+    el("h2", {}, "Snapshots on this phone", el("span", { class:"hint" }, "automatic")),
+    el("p", { class:"hint" }, "A copy is kept each day you open the app, and before every restore. They undo mistakes — they don't help if the phone is lost."));
+  view.appendChild(snapCard);
+  listSnapshots().then(list => {
+    if (!list.length) { snapCard.appendChild(el("p", { class:"hint", style:"margin-top:8px" }, "No snapshots yet — the first one is taken tomorrow, or before your first restore.")); return; }
+    for (const snap of list) snapCard.appendChild(snapshotRow(snap));
+  });
 
   /* danger zone */
   view.appendChild(el("div", { class:"card" },

@@ -31,9 +31,31 @@ post-trip analysis.
   per day, pace vs target, daily-spend chart with the target line, category
   breakdown with tap-to-drill subcategories, per-country average vs target.
   Every chart has a table view.
-- **Backup** — CSV / JSON export, JSON import (checked before it replaces
-  anything), share sheet on mobile. The app nags after 3 days without a backup.
-  **Take the nag seriously** — the data only exists on the phone.
+- **Backup** — one tap ("Back up now") opens the share sheet with a JSON
+  backup named with the date and time. The Log screen nags once there are
+  changes that aren't backed up and either 2 days have passed or 15+ changes
+  piled up. A fresh install offers "Restore a backup file" right on the welcome
+  card. CSV export is for spreadsheets; restoring needs the JSON.
+- **Snapshots** — the first time the app opens each day it keeps a copy on the
+  phone (last 14 days), plus one before every restore or import (last 5).
+  Settings lists them with a Restore button. They undo mistakes; they don't
+  help if the phone is lost.
+
+## Keeping the data safe on an iPhone
+
+The data lives only on the phone, so the backup routine is the safety net:
+
+1. **Back up now** → **Save to Files** → iCloud Drive → a `PedalLedger` folder.
+   iCloud uploads it by itself the next time there's signal. Each backup has its
+   own date-and-time name, so nothing gets overwritten.
+2. Now and then, **Back up now** → **Mail** to yourself as a second copy.
+3. **Never delete the PedalLedger icon from the home screen without a fresh
+   backup.** On iPhone that deletes the app's data too, and reinstalling doesn't
+   bring it back.
+
+**Rehearse it once before leaving:** log a few expenses, back up to iCloud
+Drive, delete the home-screen icon, reinstall from the Pages URL, and use
+"Restore a backup file" on the welcome card. Five minutes, and you know it works.
 
 ### Typing amounts
 
@@ -61,6 +83,8 @@ js/
   format.js           money / date display
   stats.js            pure number-crunching for the Stats tab
   wallet.js           cash balances, real ATM/exchange rates
+  safety.js           backup reminder rules, backup file names, snapshot retention
+  snapshots.js        on-phone snapshots in IndexedDB
   csv.js              CSV export
   backup.js           export / share / import UI
   charts.js           SVG charts
@@ -73,7 +97,7 @@ manifest.webmanifest  PWA manifest (home-screen install)
 ```
 
 Rule of thumb: anything that computes something lives in a module with **no DOM
-access** (`state`, `time`, `parse`, `format`, `stats`, `wallet`, `csv`) so it can be tested.
+access** (`state`, `time`, `parse`, `format`, `stats`, `wallet`, `safety`, `csv`) so it can be tested.
 Views only build UI and call into those.
 
 ### Changing the data shape
