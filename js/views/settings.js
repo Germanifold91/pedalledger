@@ -6,6 +6,38 @@ import { fmtUSD, fmtNum } from "../format.js";
 import { parseAmount } from "../parse.js";
 import { render } from "../router.js";
 import { exportFile, shareBackup, importButton } from "../backup.js";
+import { rateText } from "./money.js";
+
+/** Set a currency's rate; optionally re-value the expenses logged in it. Returns how many changed. */
+export function setRate(code, rate, { recalc = false } = {}){
+  S.rates[code] = rate;
+  if (!recalc) return 0;
+  const affected = S.expenses.filter(e => e.currency === code && e.perUSD !== rate);
+  for (const e of affected) { e.perUSD = rate; e.usd = e.amount / rate; }
+  return affected.length;
+}
+
+export function openRateEditor(code){
+  modal((sheet, close) => {
+    const initial = String(S.rates[code]);
+    const rateIn = el("input", { class:"txt", type:"text", id:"rate-edit", inputmode:"decimal", value:initial, autocomplete:"off" });
+    const n = S.expenses.filter(e => e.currency === code).length;
+    const recalc = el("input", { type:"checkbox", id:"rate-recalc" });
+    sheet.append(
+      el("h2", {}, `${code} exchange rate`),
+      el("label", { class:"f", for:"rate-edit" }, `How many ${code} for 1 USD?`), rateIn,
+      n ? el("label", { class:"check" }, recalc,
+        ` Also re-value my ${n} ${code} expense${n > 1 ? "s" : ""} at this rate (otherwise they keep the rate they were logged with)`) : "",
+      el("div", { class:"section-gap" }),
+      el("button", { class:"btn", onclick:() => {
+        const r = rateIn.value === initial ? S.rates[code] : parseAmount(rateIn.value);
+        if (!(r > 0)) { toast("Enter a valid rate"); return; }
+        const changed = setRate(code, r, { recalc: recalc.checked });
+        save(); close(); render();
+        toast(changed ? `Rate saved · ${changed} expense${changed > 1 ? "s" : ""} re-valued` : "Rate saved");
+      }}, "Save rate"));
+  });
+}
 
 export function renderSettings(view){
   /* countries */
@@ -17,7 +49,7 @@ export function renderSettings(view){
     cCard.appendChild(el("div", { class:"li" },
       el("div", { class:"mid" },
         el("div", { class:"t1" }, c.name + " ", isCur ? el("span", { class:"badge" }, "current") : ""),
-        el("div", { class:"t2" }, `${c.currency} · ${fmtNum(c.perUSD)} per USD · target ${fmtUSD(c.dailyTargetUSD)}/day`)),
+        el("div", { class:"t2" }, `${c.currency} · target ${fmtUSD(c.dailyTargetUSD)}/day`)),
       !isCur ? el("button", { class:"iconbtn", onclick:() => {
         S.settings.currentCountryId = c.id; save(); render(); toast(`Now in ${c.name}`);
       }}, "set current") : "",
@@ -25,6 +57,21 @@ export function renderSettings(view){
     ));
   }
   view.appendChild(cCard);
+
+  /* currencies — one rate each, shared by every country that uses it */
+  const codes = Object.keys(S.rates).filter(k => k !== "USD").sort();
+  const rCard = el("div", { class:"card" }, el("h2", {}, "Exchange rates",
+    el("span", { class:"hint" }, "local units per 1 USD")));
+  if (!codes.length) rCard.appendChild(el("div", { class:"empty" }, "Rates appear here as you add countries."));
+  for (const code of codes) {
+    const users = S.countries.filter(c => c.currency === code).map(c => c.name);
+    rCard.appendChild(el("div", { class:"li" },
+      el("div", { class:"mid" },
+        el("div", { class:"t1" }, rateText(S.rates[code], code)),
+        el("div", { class:"t2" }, users.length ? users.join(", ") : "not used by a country")),
+      el("button", { class:"iconbtn", onclick:() => openRateEditor(code) }, "edit")));
+  }
+  view.appendChild(rCard);
 
   /* categories */
   const catCard = el("div", { class:"card" }, el("h2", {}, "Categories",
@@ -76,13 +123,19 @@ export function openCountryEditor(c){
       value: c ? c.name : "", autocomplete:"off" });
     const curIn = el("input", { class:"txt", type:"text", placeholder:"e.g. COP",
       value: c ? c.currency : "", autocomplete:"off", maxlength:"3", style:"text-transform:uppercase" });
-    const initialRate = c ? String(c.perUSD) : "";
+    const initialRate = c && S.rates[c.currency] ? String(S.rates[c.currency]) : "";
     const initialTarget = c ? String(c.dailyTargetUSD) : "";
     const rateIn = el("input", { class:"txt", type:"text", inputmode:"decimal",
       placeholder:"e.g. 4150", value: initialRate, autocomplete:"off" });
     const targetIn = el("input", { class:"txt", type:"text", inputmode:"decimal",
       placeholder:"e.g. 50", value: initialTarget, autocomplete:"off" });
-    const readRate = () => rateIn.value === initialRate && c ? c.perUSD : parseAmount(rateIn.value);
+    const readRate = () => rateIn.value === initialRate && c ? S.rates[c.currency] : parseAmount(rateIn.value);
+    // typing a currency the app already knows fills in its rate
+    curIn.addEventListener("input", () => {
+      const known = S.rates[curIn.value.toUpperCase().trim()];
+      if (known && (!rateIn.value || rateIn.dataset.auto)) { rateIn.value = String(known); rateIn.dataset.auto = "1"; }
+    });
+    rateIn.addEventListener("input", () => { delete rateIn.dataset.auto; });
     const readTarget = () => targetIn.value === initialTarget && c ? c.dailyTargetUSD : parseAmount(targetIn.value);
 
     const rateHint = el("div", { class:"hint", style:"margin-top:4px" });
@@ -111,19 +164,20 @@ export function openCountryEditor(c){
       if (!/^[A-Z]{3}$/.test(code)) { toast("Currency code should be 3 letters (e.g. COP)"); return; }
       if (!isFinite(rate) || rate <= 0) { toast("Enter a valid exchange rate"); return; }
       if (!isFinite(target) || target < 0) { toast("Enter a valid daily target (0 is fine)"); return; }
+      if (code === "USD" && rate !== 1) { toast("USD is the home currency, so its rate is always 1"); return; }
       if (isNew) {
-        const nc = { id:uid(), name, currency:code, perUSD:rate, dailyTargetUSD:target };
+        const nc = { id:uid(), name, currency:code, dailyTargetUSD:target };
         S.countries.push(nc);
+        setRate(code, rate);
         S.settings.currentCountryId = nc.id;    // adding a country = you just arrived
         save(); close(); render(); toast(`${name} added — you're riding in ${name} now`);
       } else {
-        const rateChanged = rate !== c.perUSD;
-        c.name = name; c.currency = code; c.perUSD = rate; c.dailyTargetUSD = target;
-        const affected = S.expenses.filter(e => e.countryId === c.id);
-        if (rateChanged && affected.length &&
-            confirm(`Rate changed. Recalculate the USD value of ${affected.length} existing ${name} expense${affected.length > 1 ? "s" : ""} with the new rate?\n\n(Cancel keeps them at the rate they were logged with.)`)) {
-          for (const e of affected) { e.perUSD = rate; e.usd = e.amount / rate; }
-        }
+        const rateChanged = rate !== S.rates[code];
+        c.name = name; c.currency = code; c.dailyTargetUSD = target;
+        const affected = S.expenses.filter(e => e.currency === code && e.perUSD !== rate).length;
+        const recalc = rateChanged && affected > 0 &&
+          confirm(`Rate changed. Recalculate the USD value of ${affected} existing ${code} expense${affected > 1 ? "s" : ""} with the new rate?\n\n(Cancel keeps them at the rate they were logged with.)`);
+        setRate(code, rate, { recalc });
         save(); close(); render(); toast("Saved");
       }
     }}, isNew ? "Add country" : "Save"));

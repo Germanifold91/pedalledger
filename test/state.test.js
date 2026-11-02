@@ -19,13 +19,33 @@ test("fresh state is current and valid", () => {
   assert.deepEqual(validate(s), []);
 });
 
-test("v1 → v2 adds the logging offset and leaves the original untouched", () => {
+test("v1 → current adds the logging offset and leaves the original untouched", () => {
   const old = v1();
   const m = migrate(old, { offsetOf: () => -300 });
-  assert.equal(m.version, 2);
+  assert.equal(m.version, SCHEMA_VERSION);
   assert.equal(m.expenses[0].tz, -300);
   assert.equal(old.expenses[0].tz, undefined);
   assert.deepEqual(validate(m), []);
+});
+
+test("v2 → v3 moves rates onto currencies; the current country wins a shared currency", () => {
+  const d = migrate(v1(), { offsetOf: () => 0 });
+  const v2 = { ...v1(), version: 2,
+    settings: { currentCountryId:"fr" },
+    countries: [
+      { id:"de", name:"Germany", currency:"EUR", perUSD:0.95, dailyTargetUSD:40 },
+      { id:"fr", name:"France",  currency:"EUR", perUSD:0.92, dailyTargetUSD:45 },
+      { id:"c1", name:"Colombia", currency:"COP", perUSD:4000, dailyTargetUSD:40 },
+    ] };
+  v2.expenses[0].tz = -300;
+  const m = migrate(v2);
+  assert.deepEqual(m.rates, { USD:1, EUR:0.92, COP:4000 });
+  assert.ok(m.countries.every(c => !("perUSD" in c)));
+  assert.equal(m.expenses[0].paidWith, "card");
+  assert.equal(m.expenses[0].perUSD, 4000);           // expense keeps its snapshot
+  assert.deepEqual(m.cash, []);
+  assert.deepEqual(validate(m), []);
+  assert.deepEqual(validate(d), []);
 });
 
 test("migrating twice changes nothing", () => {
@@ -50,7 +70,10 @@ test("validate catches broken references and bad numbers", () => {
 test("readBackup accepts a v1 file and rejects junk", () => {
   assert.ok(readBackup(JSON.stringify(v1())).data);
   assert.match(readBackup("{oops").error, /valid JSON/);
-  assert.match(readBackup(JSON.stringify({ expenses:[] })).error, /problems/);
+  assert.match(readBackup(JSON.stringify({ expenses:[] })).error, /doesn't look like/);
+  const bad = migrate(v1(), { offsetOf: () => 0 });
+  bad.cash.push({ id:"m1", ts:"2026-03-01T00:00:00Z", kind:"withdraw", currency:"XYZ", amount:5 });
+  assert.match(readBackup(JSON.stringify(bad)).error, /cash movement #1/);
 });
 
 test("load never discards data it can't read", () => {
@@ -66,8 +89,17 @@ test("load never discards data it can't read", () => {
 test("CSV uses local date/time, quotes commas, and appends the offset", () => {
   const csv = buildCSV(migrate(v1(), { offsetOf: () => -300 }));
   const [head, row] = csv.split("\n");
-  assert.equal(head, "date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset");
+  assert.equal(head, "date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset,paid_with");
   // 02:00 UTC on 1 March was 21:00 on 28 Feb in Bogotá
-  assert.equal(row, '2026-02-28,21:00,40000,COP,4000,10.00,Colombia,Food,Restaurant,"bandeja, paisa",-05:00');
+  assert.equal(row, '2026-02-28,21:00,40000,COP,4000,10.00,Colombia,Food,Restaurant,"bandeja, paisa",-05:00,card');
   assert.equal(isoOffset(345), "+05:45");
+});
+
+test("loading old data upgrades it in storage and keeps the original once", () => {
+  const old = JSON.stringify(v1());
+  const store = new Map([[KEY, old]]);
+  const storage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  load(storage);
+  assert.equal(JSON.parse(store.get(KEY)).version, SCHEMA_VERSION);
+  assert.equal(store.get(`${KEY}.pre-v${SCHEMA_VERSION}`), old);
 });

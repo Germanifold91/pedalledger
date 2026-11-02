@@ -8,6 +8,7 @@ import { parseAmount } from "../parse.js";
 import { sumUSD } from "../stats.js";
 import { render } from "../router.js";
 import { categoryPicker } from "./picker.js";
+import { currencyField, currencyChoices, paidWithToggle } from "./money.js";
 
 export function expenseRow(e){
   const cat = catById(e.catId);
@@ -19,7 +20,8 @@ export function expenseRow(e){
     el("span", { class:"e" }, cat ? cat.emoji : "❓"),
     el("div", { class:"mid" },
       el("div", { class:"t1" }, (cat ? cat.name : "Unknown") + (sub ? " · " + sub.name : "")),
-      el("div", { class:"t2" }, [e.note, cc ? cc.name : null, clock].filter(Boolean).join(" · "))
+      el("div", { class:"t2" }, [e.paidWith === "card" ? "💳" : null, e.note, cc ? cc.name : null, clock]
+        .filter(Boolean).join(" · "))
     ),
     el("div", { class:"amt" },
       el("div", { class:"a1" }, fmtLocal(e.amount, e.currency)),
@@ -58,6 +60,13 @@ export function openExpenseEditor(e){
       S.countries.map(c => el("option", { value:c.id, selected: c.id === e.countryId ? "" : null },
         `${c.name} (${c.currency})`)));
 
+    const curField = currencyField({
+      id:"edit-cur", choices: currencyChoices(e.currency), value: e.currency,
+      onChange: code => { amountLbl.textContent = `Amount (${code || "—"})`; },
+    });
+    const paid = paidWithToggle({ value: e.paidWith || "card" });
+    const amountLbl = el("label", { class:"f" }, `Amount (${e.currency})`);
+
     const picker = categoryPicker({
       categories: S.categories.filter(c => !c.archived || c.id === e.catId),
       catId: e.catId, subId: e.subId, keepSubId: e.subId,
@@ -68,7 +77,8 @@ export function openExpenseEditor(e){
     const whenIn = el("input", { class:"txt", type:"datetime-local", value:wallClock(e.ts, e.tz) });
 
     sheet.append(
-      el("label", { class:"f" }, `Amount (${e.currency})`), amountIn,
+      amountLbl, amountIn, curField.node,
+      el("label", { class:"f" }, "Paid with"), paid.node,
       el("label", { class:"f" }, "Country"), countrySel,
       el("label", { class:"f" }, "Category"), ...picker.nodes,
       el("label", { class:"f" }, "Note"), noteIn,
@@ -77,17 +87,22 @@ export function openExpenseEditor(e){
     );
 
     sheet.appendChild(el("button", { class:"btn", onclick:() => {
+      const money = curField.read();
+      if (money.error) { toast(money.error); return; }
       // an untouched field keeps its exact stored value (no re-parsing ambiguity)
-      const a = amountIn.value === initialAmount ? e.amount : parseAmount(amountIn.value, e.currency);
+      const a = amountIn.value === initialAmount ? e.amount : parseAmount(amountIn.value, money.currency);
       if (!isFinite(a) || a <= 0) { toast("Enter a valid amount"); return; }
       const cc = countryById(countrySel.value);
       if (!cc) { toast("Pick a country"); return; }
       const { catId, subId } = picker.value();
       if (!catId) { toast("Pick a category"); return; }
+      if (money.isNew) S.rates[money.currency] = money.perUSD;
       e.amount = a;
-      // if country changed, re-snapshot rate/currency from that country
-      if (cc.id !== e.countryId) { e.countryId = cc.id; e.currency = cc.currency; e.perUSD = cc.perUSD; }
+      e.countryId = cc.id;
+      // a different currency takes today's rate for it; the same currency keeps its snapshot
+      if (money.currency !== e.currency) { e.currency = money.currency; e.perUSD = money.perUSD; }
       e.usd = e.amount / e.perUSD;
+      e.paidWith = paid.value;
       e.catId = catId; e.subId = subId;
       e.note = noteIn.value.trim();
       if (whenIn.value) e.ts = fromWallClock(whenIn.value, e.tz);

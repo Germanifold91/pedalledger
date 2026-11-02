@@ -9,10 +9,20 @@ post-trip analysis.
 - **Log** — amount in the local currency, category + subcategory, note,
   timestamp. Live USD preview that also echoes back how the amount was read
   (`50.000` → 50,000 COP). Today-vs-target meter.
-- **Countries** — each has a currency, a manual exchange rate (local units per
-  1 USD) and a daily budget target in USD. One tap to switch when you cross a
-  border. The rate is **snapshotted per expense**, so editing a rate later never
-  silently rewrites history (you're asked whether to recalculate).
+- **Countries** — each has a currency and a daily budget target in USD. One tap
+  to switch when you cross a border.
+- **Currencies & rates** — one exchange rate per currency (local units per
+  1 USD), shared by every country that uses it, so Germany and France share one
+  EUR rate. Pay any expense in any currency: the country's own is the default,
+  with one-tap chips for USD, EUR and whatever you're carrying, and "Other…" for
+  a new one. The rate is **snapshotted per expense**, so editing a rate later
+  never silently rewrites history (you choose whether to re-value).
+- **Wallet** — cash on hand per currency. Log ATM withdrawals (the fee becomes a
+  card expense; the amount charged to your card shows the rate you really got),
+  exchanges (shows the rate you got and can adopt it), and cash counts that
+  correct the balance. Each expense is marked cash or card; only cash comes out
+  of the wallet. A currency is tracked from its first withdrawal, exchange or
+  count, so if you never use the Wallet nothing goes negative.
 - **Time zones** — each expense remembers the UTC offset where it was logged, so
   it stays on the right day after you've ridden into another zone.
 - **Categories** — 8 defaults, fully editable: add, rename, archive; same for
@@ -50,18 +60,20 @@ js/
   parse.js            reading typed amounts ("50.000", "1,234.56", …)
   format.js           money / date display
   stats.js            pure number-crunching for the Stats tab
+  wallet.js           cash balances, real ATM/exchange rates
   csv.js              CSV export
   backup.js           export / share / import UI
   charts.js           SVG charts
   dom.js              el() element builder, toast, modal, tooltip
-  views/              one module per tab (log, stats, history, settings) + picker
+  views/              one module per tab (log, stats, history, wallet, settings)
+                      + shared inputs: picker (categories), money (currency, cash/card)
 test/                 unit tests (node:test, no dependencies)
 sw.js                 service worker — offline support
 manifest.webmanifest  PWA manifest (home-screen install)
 ```
 
 Rule of thumb: anything that computes something lives in a module with **no DOM
-access** (`state`, `time`, `parse`, `format`, `stats`, `csv`) so it can be tested.
+access** (`state`, `time`, `parse`, `format`, `stats`, `wallet`, `csv`) so it can be tested.
 Views only build UI and call into those.
 
 ### Changing the data shape
@@ -72,7 +84,8 @@ The saved document carries a `version`. To change its shape:
 2. Add a `MIGRATIONS[oldVersion]` function that upgrades a document in place.
 3. Add a test in `test/state.test.js` that migrates an old document.
 
-Old data on the phone and old backup files then keep loading.
+Old data on the phone and old backup files then keep loading. On the first load
+after an upgrade, the untouched original is kept under `pedalledger.v1.pre-vN`.
 
 ## Development
 
@@ -109,8 +122,11 @@ document. The CSV export has one row per expense; `date` and `time` are local to
 where it was logged:
 
 ```
-date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset
+date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset,paid_with
 ```
+
+Cash movements (withdrawals, exchanges, counts) aren't spending, so they're not
+in the CSV; they're in the JSON backup under `cash`.
 
 Post-trip in pandas:
 
