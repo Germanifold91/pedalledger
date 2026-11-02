@@ -3,14 +3,14 @@
    weak signal (Pamir 2G) the cached app opens after 3s instead of hanging, and the
    network response still refreshes the cache in the background. Offline: cache only.
    Bump CACHE whenever any file changes so installed phones pick it up. */
-const CACHE = "pedalledger-v3";
+const CACHE = "pedalledger-v4";
 const ASSETS = [
   "./", "./index.html", "./manifest.webmanifest", "./css/app.css",
   "./js/app.js", "./js/backup.js", "./js/charts.js", "./js/csv.js", "./js/dom.js",
   "./js/format.js", "./js/parse.js", "./js/router.js", "./js/state.js", "./js/stats.js",
-  "./js/time.js",
-  "./js/views/history.js", "./js/views/log.js", "./js/views/picker.js",
-  "./js/views/settings.js", "./js/views/stats.js",
+  "./js/time.js", "./js/wallet.js",
+  "./js/views/history.js", "./js/views/log.js", "./js/views/money.js", "./js/views/picker.js",
+  "./js/views/settings.js", "./js/views/stats.js", "./js/views/wallet.js",
 ];
 const NETWORK_TIMEOUT_MS = 3000;
 

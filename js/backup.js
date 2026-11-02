@@ -42,7 +42,9 @@ export async function shareBackup(){
 export function readBackup(text){
   let data;
   try { data = JSON.parse(text); } catch { return { error:"That file isn't valid JSON." }; }
-  if (!data || typeof data !== "object") return { error:"That file doesn't look like a PedalLedger backup." };
+  if (!data || typeof data !== "object" ||
+      !["expenses", "countries", "categories"].every(k => Array.isArray(data[k])))
+    return { error:"That file doesn't look like a PedalLedger backup." };
   try { data = migrate(data); } catch (err) { return { error: err.message }; }
   const problems = validate(data);
   if (problems.length) return { error:`That backup has problems: ${problems.slice(0, 3).join("; ")}` +

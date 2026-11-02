@@ -2,7 +2,7 @@
 
 import { el, toast } from "../dom.js";
 import { S, save, uid, catById, currentCountry } from "../state.js";
-import { fmtUSD, fmtLocal, fmtNum } from "../format.js";
+import { fmtUSD, fmtLocal } from "../format.js";
 import { dayOf, todayKey, nowWallClock, fromWallClock, offsetAt } from "../time.js";
 import { parseAmount } from "../parse.js";
 import { sumUSD } from "../stats.js";
@@ -10,9 +10,12 @@ import { render, go } from "../router.js";
 import { categoryPicker } from "./picker.js";
 import { expenseRow } from "./history.js";
 import { openCountryEditor } from "./settings.js";
+import { currencyField, currencyChoices, paidWithToggle, rateText } from "./money.js";
+import { balances } from "../wallet.js";
 
-// category selection survives re-renders (e.g. switching tabs mid-entry)
-const draft = { catId:null, subId:null };
+// selections survive re-renders (e.g. switching tabs mid-entry).
+// currency null = the current country's currency.
+const draft = { catId:null, subId:null, currency:null };
 
 export function backupOverdueDays(now = Date.now()){
   if (!S.expenses.length) return 0;
@@ -47,15 +50,50 @@ export function renderLog(view){
   view.appendChild(meterCard(sumUSD(todays), cc.dailyTargetUSD));
 
   // ---- entry form ----
-  const amountIn = el("input", { type:"text", inputmode:"decimal", placeholder:"0",
-    autocomplete:"off", oninput:updatePreview, "aria-label":"Amount in " + cc.currency });
+  const amountIn = el("input", { type:"text", id:"amount", inputmode:"decimal", placeholder:"0",
+    autocomplete:"off", oninput:updatePreview, "aria-label":"Amount" });
+  const curLabel = el("span", { class:"cur" });
   const preview = el("div", { class:"usd-preview" });
+  const cashLine = el("div", { class:"cash-line" });
+
+  const curField = currencyField({
+    id:"log-cur",
+    choices: currencyChoices(cc.currency),
+    value: draft.currency || cc.currency,
+    onChange: code => { draft.currency = code === cc.currency ? null : code; updatePreview(); },
+  });
+  const paid = paidWithToggle({
+    value: S.settings.lastPaidWith || "cash",
+    onChange: () => updatePreview(),
+  });
+
   function updatePreview(){
-    const a = parseAmount(amountIn.value, cc.currency);
+    const code = curField.currency;
+    curLabel.textContent = code || "—";
+    amountIn.setAttribute("aria-label", "Amount in " + (code || "local currency"));
+    const a = parseAmount(amountIn.value, code);
+    const r = curField.read();
     // echo back how the number was read, so "50.000" visibly means fifty thousand
-    preview.textContent = (isFinite(a) && a > 0 && cc.perUSD > 0)
-      ? `${fmtLocal(a, cc.currency)} ≈ ${fmtUSD(a / cc.perUSD)} · ${fmtNum(cc.perUSD)} ${cc.currency}/USD`
-      : amountIn.value.trim() ? "Can't read that amount" : "";
+    if (!amountIn.value.trim()) preview.textContent = "";
+    else if (!(isFinite(a) && a > 0)) preview.textContent = "Can't read that amount";
+    else if (r.error) preview.textContent = fmtLocal(a, code);
+    else preview.textContent = code === "USD" ? fmtUSD(a)
+      : `${fmtLocal(a, code)} ≈ ${fmtUSD(a / r.perUSD)} · ${rateText(r.perUSD, code)}`;
+
+    // cash on hand, only when paying cash in a currency we've tracked
+    cashLine.replaceChildren();
+    cashLine.className = "cash-line";
+    if (paid.value === "cash" && /^[A-Z]{3}$/.test(code || "")) {
+      const tracked = balances(S);
+      if (tracked.has(code)) {
+        const have = tracked.get(code);
+        const short = isFinite(a) && a > have;
+        cashLine.className = "cash-line" + (short ? " short" : "");
+        cashLine.append(`💵 ${fmtLocal(have, code)} in your pocket`,
+          short ? " — that's more than you have. " : "",
+          short ? el("button", { type:"button", class:"linkbtn", onclick:() => go("wallet") }, "Count cash") : "");
+      }
+    }
   }
 
   const picker = categoryPicker({
@@ -65,37 +103,44 @@ export function renderLog(view){
   });
   Object.assign(draft, picker.value());
 
-  const noteIn = el("input", { class:"txt", type:"text", placeholder:"Note (optional)", autocomplete:"off" });
-  const whenIn = el("input", { class:"txt", type:"datetime-local", value:nowWallClock() });
+  const noteIn = el("input", { class:"txt", type:"text", id:"note", placeholder:"Note (optional)", autocomplete:"off" });
+  const whenIn = el("input", { class:"txt", type:"datetime-local", id:"when", value:nowWallClock() });
 
   const saveBtn = el("button", { class:"btn", onclick:() => {
-    const a = parseAmount(amountIn.value, cc.currency);
+    const money = curField.read();
+    if (money.error) { toast(money.error); return; }
+    const a = parseAmount(amountIn.value, money.currency);
     if (!isFinite(a) || a <= 0) { toast("Enter an amount"); amountIn.focus(); return; }
     if (!draft.catId) { toast("Pick a category"); return; }
-    if (!(cc.perUSD > 0)) { toast("This country has no exchange rate set"); return; }
+    if (money.isNew) S.rates[money.currency] = money.perUSD;
     const tz = offsetAt();
     const ts = whenIn.value ? fromWallClock(whenIn.value, tz) : new Date().toISOString();
     S.expenses.push({
-      id: uid(), ts, tz, amount:a, currency:cc.currency, perUSD:cc.perUSD,
-      usd: a / cc.perUSD, countryId: cc.id, catId: draft.catId, subId: draft.subId,
-      note: noteIn.value.trim()
+      id: uid(), ts, tz, amount:a, currency:money.currency, perUSD:money.perUSD,
+      usd: a / money.perUSD, countryId: cc.id, catId: draft.catId, subId: draft.subId,
+      note: noteIn.value.trim(), paidWith: paid.value,
     });
+    S.settings.lastPaidWith = paid.value;
     save();
     const cat = catById(draft.catId);
-    toast(`Saved ${fmtLocal(a, cc.currency)} · ${cat.emoji} ${cat.name}`);
-    draft.catId = null; draft.subId = null;
+    toast(`Saved ${fmtLocal(a, money.currency)} · ${cat.emoji} ${cat.name}` + (paid.value === "card" ? " · card" : ""));
+    draft.catId = null; draft.subId = null; draft.currency = null;
     render();
   }}, "Save expense");
 
   view.appendChild(el("div", { class:"card" },
     el("h2", {}, "New expense"),
-    el("div", { class:"amount-wrap" }, amountIn, el("span", { class:"cur" }, cc.currency)),
+    el("div", { class:"amount-wrap" }, amountIn, curLabel),
     preview,
+    curField.node,
+    el("label", { class:"f" }, "Paid with"), paid.node,
+    cashLine,
     el("label", { class:"f" }, "Category"), ...picker.nodes,
     el("label", { class:"f" }, "Note"), noteIn,
     el("label", { class:"f" }, "When"), whenIn,
     el("div", { class:"section-gap" }), saveBtn
   ));
+  updatePreview();
 
   if (todays.length) {
     view.appendChild(el("div", { class:"card" },

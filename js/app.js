@@ -8,10 +8,11 @@ import { renderLog } from "./views/log.js";
 import { renderStats } from "./views/stats.js";
 import { renderHistory } from "./views/history.js";
 import { renderSettings, openCountrySwitcher } from "./views/settings.js";
+import { renderWallet } from "./views/wallet.js";
 
 load();
 
-registerViews({ log:renderLog, stats:renderStats, history:renderHistory, settings:renderSettings });
+registerViews({ log:renderLog, stats:renderStats, history:renderHistory, wallet:renderWallet, settings:renderSettings });
 
 const pill = document.getElementById("countryPill");
 onRenderHeader(() => {
