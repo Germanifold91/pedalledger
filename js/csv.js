@@ -1,10 +1,11 @@
 /* CSV export: one row per expense, oldest first. date/time are local to where the
-   expense was logged; utc_offset says which zone that was (e.g. +03:00); paid_with is cash or card. */
+   expense was logged; utc_offset says which zone that was (e.g. +03:00); paid_with is cash or card; one_off is "yes" for visas, flights and other
+   big costs kept out of daily averages. */
 
 import { dayOf, timeOf } from "./time.js";
 
 export const CSV_COLUMNS = ["date","time","amount","currency","local_per_usd","usd",
-  "country","category","subcategory","note","utc_offset","paid_with"];
+  "country","category","subcategory","note","utc_offset","paid_with","one_off"];
 
 export function csvEscape(v){
   const s = String(v ?? "");
@@ -26,7 +27,7 @@ export function buildCSV(state){
     lines.push([
       dayOf(e), timeOf(e), e.amount, e.currency, e.perUSD, e.usd.toFixed(2),
       cc ? cc.name : "", cat ? cat.name : "", sub ? sub.name : "", e.note || "", isoOffset(e.tz),
-      e.paidWith || "",
+      e.paidWith || "", e.oneOff ? "yes" : "",
     ].map(csvEscape).join(","));
   }
   return lines.join("\n");

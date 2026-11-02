@@ -3,7 +3,6 @@
 import { el, css, showTip, hideTip } from "./dom.js";
 import { fmtUSD, fmtUSDc, fmtDay, fmtDayShort } from "./format.js";
 import { niceMax } from "./stats.js";
-import { todayKey } from "./time.js";
 
 /* rounded-top vertical bar (4px data end, square baseline) */
 function vBarPath(x, y, w, h){
@@ -41,75 +40,6 @@ export function chartCard(title, buildSvg, tableSpec){
   }
   paint();
   return el("div", { class:"card" }, el("h2", {}, el("span", {}, title), tBtn), body);
-}
-
-/** Daily bars with a stepped target line. countryOf(day) → country or undefined. */
-export function dailyChart(days, dailyTotals, countryOf){
-  const n = days.length;
-  const plotH = 170, axisB = 22, padT = 14, padL = 40, padR = 48;
-  const slot = Math.max(16, Math.min(44, Math.floor((availW() - padL - padR) / n)));
-  const barW = Math.min(24, Math.max(5, slot - 4));
-  const W = padL + n*slot + padR, H = padT + plotH + axisB;
-
-  const targets = days.map(d => countryOf(d)?.dailyTargetUSD || 0);
-  const maxV = niceMax(Math.max(...days.map(d => dailyTotals.get(d) || 0), ...targets, 1));
-  const yOf = v => padT + plotH - (v/maxV)*plotH;
-
-  const svg = el("svg", { width:W, height:H, viewBox:`0 0 ${W} ${H}`, role:"img",
-    "aria-label":"Daily spend in US dollars with daily target line" });
-
-  // gridlines + y ticks (5 divisions of a nice max always land on clean numbers)
-  for (let i = 0; i <= 5; i++){
-    const v = maxV*i/5, y = yOf(v);
-    svg.appendChild(el("line", { x1:padL, y1:y, x2:W-padR+6, y2:y,
-      stroke: i === 0 ? css("--axis") : css("--grid"), "stroke-width":1 }));
-    svg.appendChild(el("text", { x:padL-6, y:y+3.5, "text-anchor":"end",
-      "font-size":10, fill:css("--muted"), style:"font-variant-numeric:tabular-nums" }, fmtUSDc(v)));
-  }
-
-  // target step line (solid hairline, secondary ink)
-  if (targets.some(t => t > 0)) {
-    const stepPts = [];
-    days.forEach((d, i) => {
-      const y = yOf(targets[i]);
-      stepPts.push(`${padL + i*slot},${y}`, `${padL + (i+1)*slot},${y}`);
-    });
-    svg.appendChild(el("polyline", { points:stepPts.join(" "), fill:"none",
-      stroke:css("--ink-2"), "stroke-width":1 }));
-    svg.appendChild(el("text", { x:W-2, y:yOf(targets[n-1])+3.5, "font-size":10,
-      "text-anchor":"end", fill:css("--ink-2") }, "target"));
-  }
-
-  // bars + hit targets
-  const today = todayKey();
-  const k = Math.ceil(n/8);
-  days.forEach((d, i) => {
-    const v = dailyTotals.get(d) || 0;
-    const x = padL + i*slot + (slot-barW)/2;
-    if (v > 0) {
-      const y = yOf(v);
-      svg.appendChild(el("path", { d:vBarPath(x, y, barW, padT+plotH-y), fill:css("--s1"),
-        opacity: d === today ? 1 : .92 }));
-    }
-    const hit = el("rect", { x:padL+i*slot, y:padT, width:slot, height:plotH+axisB, fill:"transparent" });
-    const c = countryOf(d);
-    const tip = ev => showTip(ev.clientX, ev.clientY, [
-      { text: fmtUSD(v), strong:true },
-      { text: fmtDay(d) },
-      { text: c ? `target ${fmtUSD(c.dailyTargetUSD)} · ${c.name}` : "no target" }
-    ]);
-    hit.addEventListener("pointermove", tip);
-    hit.addEventListener("pointerdown", tip);
-    hit.addEventListener("pointerleave", hideTip);
-    svg.appendChild(hit);
-    // x labels — thinned to avoid collisions
-    if (i === n-1 || (i % k === 0 && n-1-i >= k)) {
-      svg.appendChild(el("text", { x:padL+i*slot+slot/2, y:H-7, "text-anchor":"middle",
-        "font-size":10, fill:css("--muted") }, fmtDayShort(d)));
-    }
-  });
-
-  return el("div", { class:"chart-scroll" }, svg);
 }
 
 /** Horizontal bars per category; tap a bar to show its subcategories. rows from categoryTotals(). */
@@ -206,4 +136,100 @@ export function countryChart(rows){
     wrap.appendChild(svg);
   }
   return wrap;
+}
+
+/**
+ * Daily bars (faint) with a rolling-average line on top, an optional target step line,
+ * and dashed markers on days the country changed.
+ *   bars, line: numbers per day   targets: numbers per day or null
+ *   borders: [{index, label}]     windowLabel: e.g. "7-day average"
+ */
+export function trendChart(days, { bars, line, targets = null, borders = [], windowLabel, tip = () => [] }){
+  const n = days.length;
+  const plotH = 170, axisB = 22, padT = 18, padL = 40, padR = 12;
+  const slot = Math.max(6, Math.min(44, (availW() - padL - padR) / n));
+  const barW = Math.max(2, Math.min(22, slot - 2));
+  const W = Math.ceil(padL + n*slot + padR), H = padT + plotH + axisB;
+  const maxV = niceMax(Math.max(...bars, ...line, ...(targets || []), 1));
+  const yOf = v => padT + plotH - (v/maxV)*plotH;
+  const xMid = i => padL + i*slot + slot/2;
+
+  const svg = el("svg", { width:W, height:H, viewBox:`0 0 ${W} ${H}`, role:"img",
+    "aria-label": `Daily spend in US dollars with ${windowLabel}` });
+
+  for (let i = 0; i <= 5; i++){
+    const v = maxV*i/5, y = yOf(v);
+    svg.appendChild(el("line", { x1:padL, y1:y, x2:W-padR, y2:y,
+      stroke: i === 0 ? css("--axis") : css("--grid"), "stroke-width":1 }));
+    svg.appendChild(el("text", { x:padL-6, y:y+3.5, "text-anchor":"end",
+      "font-size":10, fill:css("--muted"), style:"font-variant-numeric:tabular-nums" }, fmtUSDc(v)));
+  }
+
+  // country changes: dashed line + short name, skipping labels that would collide
+  let lastLabelX = -Infinity;
+  for (const b of borders) {
+    const x = padL + b.index*slot;
+    svg.appendChild(el("line", { x1:x, y1:padT - 4, x2:x, y2:padT + plotH,
+      stroke:css("--muted"), "stroke-width":1, "stroke-dasharray":"3 3" }));
+    if (x - lastLabelX > 56) {
+      svg.appendChild(el("text", { x:x + 3, y:padT - 6, "font-size":9.5, fill:css("--ink-2") }, b.label.slice(0, 10)));
+      lastLabelX = x;
+    }
+  }
+
+  // bars: the raw days, deliberately quiet
+  bars.forEach((v, i) => {
+    if (v <= 0) return;
+    const y = yOf(v);
+    svg.appendChild(el("path", { d:vBarPath(padL + i*slot + (slot-barW)/2, y, barW, padT+plotH-y),
+      fill:css("--s1"), opacity:.28 }));
+  });
+
+  // target step line
+  if (targets && targets.some(t => t > 0)) {
+    const pts = [];
+    targets.forEach((t, i) => pts.push(`${padL + i*slot},${yOf(t)}`, `${padL + (i+1)*slot},${yOf(t)}`));
+    svg.appendChild(el("polyline", { points:pts.join(" "), fill:"none", stroke:css("--ink-2"), "stroke-width":1 }));
+  }
+
+  // the rolling average: the line that carries the story
+  if (n > 1) {
+    svg.appendChild(el("polyline", { points: line.map((v, i) => `${xMid(i)},${yOf(v)}`).join(" "),
+      fill:"none", stroke:css("--s1"), "stroke-width":2.25, "stroke-linejoin":"round", "stroke-linecap":"round" }));
+  }
+  svg.appendChild(el("circle", { cx:xMid(n-1), cy:yOf(line[n-1]), r:3.5, fill:css("--s1"),
+    stroke:css("--surface"), "stroke-width":1.5 }));
+
+  // hit areas + x labels
+  const k = Math.ceil(n/7);
+  days.forEach((d, i) => {
+    const hit = el("rect", { x:padL+i*slot, y:padT, width:slot, height:plotH+axisB, fill:"transparent" });
+    const show = ev => showTip(ev.clientX, ev.clientY, [
+      { text: fmtUSD(line[i]) + " / day avg", strong:true },
+      { text: fmtDay(d) + " · spent " + fmtUSD(bars[i]) },
+      ...tip(i)]);
+    hit.addEventListener("pointermove", show);
+    hit.addEventListener("pointerdown", show);
+    hit.addEventListener("pointerleave", hideTip);
+    svg.appendChild(hit);
+    if (i === n-1 || (i % k === 0 && n-1-i >= k*0.6)) {
+      svg.appendChild(el("text", { x:xMid(i), y:H-7, "text-anchor":"middle",
+        "font-size":10, fill:css("--muted") }, fmtDayShort(d)));
+    }
+  });
+
+  return el("div", { class:"chart-scroll" }, svg);
+}
+
+/** Tiny trend line for a list row; the last point is marked. */
+export function sparkline(values, { w = 84, h = 26 } = {}){
+  const max = Math.max(...values, 0.0001);
+  const step = values.length > 1 ? (w - 4) / (values.length - 1) : 0;
+  const pts = values.map((v, i) => [2 + i*step, h - 3 - (v/max)*(h - 6)]);
+  const svg = el("svg", { width:w, height:h, viewBox:`0 0 ${w} ${h}`, "aria-hidden":"true", class:"spark" });
+  svg.appendChild(el("polyline", { points: pts.map(p => p.join(",")).join(" "), fill:"none",
+    stroke:css("--s1"), "stroke-width":1.75, "stroke-linejoin":"round", "stroke-linecap":"round" }));
+  const [lx, ly] = pts[pts.length - 1];
+  svg.appendChild(el("circle", { cx:lx, cy:ly, r:2.5, fill:css("--s1") }));
+  return svg;
 }

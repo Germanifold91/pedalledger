@@ -27,10 +27,23 @@ post-trip analysis.
   it stays on the right day after you've ridden into another zone.
 - **Categories** — 8 defaults, fully editable: add, rename, archive; same for
   subcategories. Archived ones keep labeling old expenses.
+- **Trip budget** — set a total budget, and optionally a start date (so gear
+  bought at home doesn't count) and a planned end. Stats opens with what's
+  left, your recent pace (last 30 days, one-offs excluded), how long the money
+  lasts at that pace, and — with an end date — how much you can spend per day
+  to make it.
+- **One-offs** — mark big, rare costs (visa, flight, new wheel) as one-off.
+  They count in totals and the budget but stay out of daily averages, the
+  today-vs-target meter and trends, so one visa doesn't make a country look
+  ruinous.
 - **Stats** — date-range filter (whole trip / 30d / 7d / today), total, average
-  per day, pace vs target, daily-spend chart with the target line, category
-  breakdown with tap-to-drill subcategories, per-country average vs target.
-  Every chart has a table view.
+  per day, pace vs target, daily spend with a **rolling average** (7, 14 or 30
+  days; days without spending count as $0) over faint daily bars, the target
+  line and dashed markers where you changed country. **Category trends** show
+  each category's average per day over the window, the change versus the window
+  before, and a sparkline; tap one for its full chart. Then the category
+  breakdown (tap to drill into subcategories) and per-country average vs
+  target. Every chart has a table view.
 - **Backup** — one tap ("Back up now") opens the share sheet with a JSON
   backup named with the date and time. The Log screen nags once there are
   changes that aren't backed up and either 2 days have passed or 15+ changes
@@ -82,6 +95,7 @@ js/
   parse.js            reading typed amounts ("50.000", "1,234.56", …)
   format.js           money / date display
   stats.js            pure number-crunching for the Stats tab
+  trends.js           rolling averages, category trends, trip budget projection
   wallet.js           cash balances, real ATM/exchange rates
   safety.js           backup reminder rules, backup file names, snapshot retention
   snapshots.js        on-phone snapshots in IndexedDB
@@ -97,7 +111,7 @@ manifest.webmanifest  PWA manifest (home-screen install)
 ```
 
 Rule of thumb: anything that computes something lives in a module with **no DOM
-access** (`state`, `time`, `parse`, `format`, `stats`, `wallet`, `safety`, `csv`) so it can be tested.
+access** (`state`, `time`, `parse`, `format`, `stats`, `trends`, `wallet`, `safety`, `csv`) so it can be tested.
 Views only build UI and call into those.
 
 ### Changing the data shape
@@ -146,7 +160,7 @@ document. The CSV export has one row per expense; `date` and `time` are local to
 where it was logged:
 
 ```
-date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset,paid_with
+date,time,amount,currency,local_per_usd,usd,country,category,subcategory,note,utc_offset,paid_with,one_off
 ```
 
 Cash movements (withdrawals, exchanges, counts) aren't spending, so they're not

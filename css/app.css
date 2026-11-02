@@ -201,3 +201,42 @@ label.check input{margin-top:2px; accent-color:var(--s1)}
 ul.tips{margin:12px 0 0; padding-left:18px; font-size:12px; color:var(--ink-2); display:grid; gap:5px; line-height:1.4}
 ul.tips b{color:var(--ink)}
 .restore-hint{display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; justify-content:center; margin-top:12px; font-size:13px; color:var(--ink-2)}
+
+/* one-off */
+.oneoff-row{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px}
+.oneoff-row .hint{flex:1; min-width:140px}
+.badge.oneoff{margin-left:6px; font-size:10px; padding:1px 6px; vertical-align:2px}
+
+/* trip budget */
+.budget-empty{display:flex; gap:12px; align-items:center}
+.budget-empty .mid{flex:1; min-width:0}
+.budget-empty .t1{font-size:15px; font-weight:600; margin-bottom:2px}
+.budget .big.neg{color:var(--critical)}
+.budget-lines{display:grid; gap:4px; font-size:13px; color:var(--ink-2); margin-top:10px; line-height:1.4}
+.budget-lines b{color:var(--ink); font-variant-numeric:tabular-nums}
+.verdict{margin-top:10px; font-size:13px; font-weight:600; line-height:1.4}
+.verdict.good{color:var(--good-text)} .verdict.bad{color:var(--critical)}
+.hero-sub{font-size:12px; color:var(--ink-2); margin-top:4px}
+
+/* trends */
+.trend-head{display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin-bottom:10px}
+.win-pills{margin-top:0}
+.win-pills .pill{padding:4px 10px; font-size:12px}
+.legend{display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center; font-size:11px; color:var(--ink-2)}
+.legend span{display:inline-block; vertical-align:middle; margin-right:-4px}
+.lg-line{width:16px; height:3px; border-radius:2px; background:var(--s1)}
+.lg-bar{width:8px; height:10px; border-radius:2px; background:var(--s1); opacity:.28}
+.lg-target{width:16px; height:1px; background:var(--ink-2)}
+.lg-border{width:0; height:11px; border-left:1px dashed var(--muted)}
+.trend-row{display:grid; grid-template-columns:24px minmax(0,1fr) 84px 70px 56px; gap:8px; align-items:center;
+  width:100%; border:0; border-top:1px solid var(--grid); background:none; padding:9px 2px; text-align:left; cursor:pointer}
+.trend-row .e{font-size:17px}
+.trend-row .name{font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.trend-row .val{font-size:13px; font-weight:600; text-align:right; font-variant-numeric:tabular-nums}
+.trend-row .chg{font-size:12px; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums}
+.trend-row .chg.up{color:var(--critical)} .trend-row .chg.down{color:var(--good-text)}
+.trend-row.open{background:var(--tint); border-radius:8px}
+.trend-row:focus-visible{outline:2px solid var(--s1); outline-offset:-2px}
+.trend-detail{padding:6px 0 10px}
+.trend-detail .hint{margin-top:4px}
+@media (max-width:370px){ .trend-row{grid-template-columns:22px minmax(0,1fr) 64px 62px 50px} .trend-row .spark{width:64px} }

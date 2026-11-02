@@ -15,21 +15,25 @@ export function rangeDays(expenses, range, today){
 }
 
 /**
- * Totals for a set of days.
+ * Totals for a set of days. Daily figures (dailyTotals, avg) leave out one-off expenses;
+ * `total` includes them.
  * dayCountry: the country each day "belongs to" for targets — the one with the most
  * spend that day, carried forward over days with no spending.
  */
 export function summarize(state, days){
   const daySet = new Set(days);
   const inRange = state.expenses.filter(e => daySet.has(dayOf(e)));
-  const total = sumUSD(inRange);
-  const avg = days.length ? total / days.length : 0;
+  const everyday = inRange.filter(e => !e.oneOff);
+  const total = sumUSD(inRange);                 // everything, one-offs included
+  const oneOffTotal = total - sumUSD(everyday);
+  const everydayTotal = sumUSD(everyday);
+  const avg = days.length ? everydayTotal / days.length : 0;   // one-offs would distort a daily average
 
-  const dailyTotals = new Map(days.map(d => [d, 0]));
+  const dailyTotals = new Map(days.map(d => [d, 0]));          // everyday spend per day
   const perDayCountry = new Map();
   for (const e of inRange) {
     const k = dayOf(e);
-    dailyTotals.set(k, dailyTotals.get(k) + e.usd);
+    if (!e.oneOff) dailyTotals.set(k, dailyTotals.get(k) + e.usd);
     if (!perDayCountry.has(k)) perDayCountry.set(k, new Map());
     const m = perDayCountry.get(k);
     m.set(e.countryId, (m.get(e.countryId) || 0) + e.usd);
@@ -44,10 +48,10 @@ export function summarize(state, days){
   const byId = new Map(state.countries.map(c => [c.id, c]));
   const targetSum = days.reduce((a, d) => a + (byId.get(dayCountry.get(d))?.dailyTargetUSD || 0), 0);
 
-  return { inRange, total, avg, dailyTotals, dayCountry, targetSum };
+  return { inRange, everyday, total, everydayTotal, oneOffTotal, avg, dailyTotals, dayCountry, targetSum };
 }
 
-/** Per-country average spend per day vs target. */
+/** Per-country average spend per day vs target. Pass everyday expenses (no one-offs). */
 export function countryStats(state, inRange, days, dayCountry){
   const m = new Map();
   for (const e of inRange) m.set(e.countryId, (m.get(e.countryId) || 0) + e.usd);
